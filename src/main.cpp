@@ -8,18 +8,37 @@
 using namespace cv;
 using namespace std;
 
-// Función auxiliar para dibujar los resultados
+// --- Configuración Global ---
+const int PERSON_CLASS_ID = 0; // ID de la clase 'persona' en el coco.names traducido
+const int ALARM_CLASS_ID = 26; // ID de la clase 'arma de fuego' (o similar), si entrenaste una. 
+                               // Usaremos 26 como ejemplo para 'backpack' si no hay una clase arma real.
+
+// Función para dibujar los resultados en el frame
 void drawDetections(Mat& frame, const std::vector<Detection>& detections, const std::vector<std::string>& classNames) {
-    // Implementación de visualización con alarmas en español
-    // ... (El código provisto en la respuesta anterior de traducción)
+    for (const auto& det : detections) {
+        // Rojo para alarma (si la clase coincide con ALARM_CLASS_ID), Verde para personas/otros
+        Scalar color = (det.classId == ALARM_CLASS_ID) ? Scalar(0, 0, 255) : Scalar(0, 255, 0); 
+
+        rectangle(frame, det.box, color, 2);
+        
+        // Formato: NombreClase ID:42 (Conf: 0.85)
+        string label = classNames[det.classId] + format(" ID:%d (Conf: %.2f)", det.trackId, det.confidence);
+
+        // Disparo de Alarma Visual en la parte superior del frame
+        if (det.classId == ALARM_CLASS_ID) {
+             putText(frame, "!!! ALERTA: OBJETO PELIGROSO DETECTADO !!!", Point(50, 50), FONT_HERSHEY_SIMPLEX, 1.0, Scalar(0, 0, 255), 3);
+        }
+
+        // Etiqueta sobre el bounding box
+        putText(frame, label, Point(det.box.x, det.box.y - 10), FONT_HERSHEY_SIMPLEX, 0.5, color, 2);
+    }
 }
 
 int main() {
     // --- CONFIGURACIÓN DE ARCHIVOS ---
     string modelPath = "models/yolov8n.onnx";
     string classesPath = "models/coco.names";
-    string videoPath = "0"; 
-    const int PERSON_CLASS_ID = 0; // Asumiendo que 'persona' es la primera clase
+    string videoPath = "0"; // 0 para webcam
 
     try {
         // 1. Inicializar Componentes C++
@@ -52,17 +71,21 @@ int main() {
             std::vector<Detection> detections = detector.detect(frame);
 
             // B. Seguimiento (Asignación de IDs)
-            tracker.updateTracks(detections);
+            tracker.updateTracks(detecciones);
 
             // C. Envío Asíncrono a Python (Reconocimiento Facial)
             for (const auto& det : detections) {
-                // Solo enviamos si es una 'persona' y su ID es conocido (seguimiento estable)
+                // Solo enviamos si es una 'persona' y su ID es estable (trackId != -1)
                 if (det.classId == PERSON_CLASS_ID && det.trackId != -1) { 
-                    // Se recorta la región completa de la persona (simplificado)
-                    cv::Mat person_region = frame(det.box).clone(); 
                     
-                    // Envío a Python para reconocimiento (asíncrono)
-                    zmq_sender.sendFaceForRecognition(det.trackId, person_region); 
+                    // Recortar la región completa de la persona (Python se encarga de detectar el rostro)
+                    // Usamos un tamaño fijo para evitar errores de recorte si el bbox está en el borde
+                    Rect safe_box = det.box & Rect(0, 0, frame.cols, frame.rows);
+
+                    if (safe_box.area() > 0) {
+                        cv::Mat person_region = frame(safe_box).clone(); 
+                        zmq_sender.sendFaceForRecognition(det.trackId, person_region); 
+                    }
                 }
             }
             
