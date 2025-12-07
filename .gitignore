@@ -1,0 +1,23 @@
+
+```text
+# Archivos de compilación
+build/
+bin/
+*.exe
+*.o
+*.obj
+
+# Entorno Virtual Python
+venv/
+
+# Base de Datos
+python_services/*.db
+
+# Modelos pesados
+*.onnx
+*.pt
+
+# Archivos de IDE y Sistema
+.vscode/
+.idea/
+.DS_Store
